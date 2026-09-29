@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 import os
 from pathlib import Path
 import re
+import time
 from typing import Optional, Any
 import uuid
 import aiofiles
@@ -18,11 +19,14 @@ from app.core.errors import (
 )
 from app.core.proxy import proxy_manager
 from app.core.security import sanitize_filename, validate_url_security
+from app.core.telemetry import log_extraction_event, ExtractionTimer, sanitize_proxy_url
+from app.core.youtube_config import YouTubeExtractorConfig
+from app.core.youtube_errors import classify_youtube_error
 from app.schemas.download import DownloadJobStatus, DownloadStatus
 from app.services.converter import media_converter
 from app.services.archiver import media_archiver
 from app.utils.mime import format_bytes, guess_extension
-from app.utils.text import clean_title
+from app.utils.text import clean_title, extract_domain
 
 
 class DownloadJob:
@@ -105,6 +109,7 @@ class DownloadManager:
     ):
         job = self.get_job(job_id)
         job.task = asyncio.current_task()
+        temp_path: Optional[Path] = None
 
         try:
             job.status = "downloading"
@@ -174,14 +179,17 @@ class DownloadManager:
         except asyncio.CancelledError:
             job.status = "cancelled"
             job.message = "Download cancelled"
-            if temp_path.exists():
+            if temp_path and temp_path.exists():
                 temp_path.unlink()
         except Exception as e:
             job.status = "failed"
             job.error = str(e)
             job.message = f"Download failed: {str(e)}"
-            if 'temp_path' in locals() and temp_path.exists():
-                temp_path.unlink()
+            if temp_path and temp_path.exists():
+                try:
+                    temp_path.unlink()
+                except Exception:
+                    pass
 
     async def start_ytdlp_download(
         self,
@@ -194,6 +202,10 @@ class DownloadManager:
         job = self.get_job(job_id)
         job.task = asyncio.current_task()
         loop = asyncio.get_running_loop()
+        domain = extract_domain(url)
+        is_youtube = "youtube" in url.lower() or "youtu.be" in url.lower()
+        proxy_used: Optional[str] = None
+        video_id: Optional[str] = None
 
         try:
             job.status = "downloading"
@@ -219,81 +231,74 @@ class DownloadManager:
                     job.message = "Processing media stream..."
                     job.progress = 90.0
 
-            # Determine ytdlp format selector & merge format
-            postprocessors = []
-            merge_format = "mp4"
-
-            if target_format in ["mp3", "m4a", "wav"]:
-                fmt_selector = "bestaudio/best"
-                postprocessors.append({
-                    "key": "FFmpegExtractAudio",
-                    "preferredcodec": target_format,
-                    "preferredquality": "192",
-                })
-            elif format_id and format_id not in ["best", "direct"]:
-                # If specific video stream chosen, merge with best audio
-                fmt_selector = f"{format_id}+bestaudio/bestvideo+bestaudio/{format_id}/best"
-                if target_format in ["mp4", "webm", "mkv"]:
-                    merge_format = target_format
-            else:
-                fmt_selector = "bestvideo+bestaudio/best"
-                if target_format in ["mp4", "webm", "mkv"]:
-                    merge_format = target_format
-
-            ydl_opts = {
-                "format": fmt_selector,
-                "outtmpl": out_template,
-                "merge_output_format": merge_format,
-                "noplaylist": True,
-                "progress_hooks": [progress_hook],
-                "quiet": True,
-                "no_warnings": True,
-                "user_agent": settings.USER_AGENT,
-                "max_filesize": settings.MAX_FILE_SIZE_BYTES,
-                "postprocessors": postprocessors,
-                "js_runtimes": {"node": {}},
-            }
-
-            # Optional cookies and proxy for cloud deployments
             def _sync_download():
+                nonlocal proxy_used, video_id
                 cookie_file = get_cookie_file_path()
-                proxies_to_try = proxy_manager.get_all_proxies()
+                proxies_to_try = proxy_manager.get_all_healthy_proxies()
                 if not proxies_to_try:
                     proxies_to_try = [None]
 
                 last_error = None
                 for proxy_candidate in proxies_to_try:
-                    opts = dict(ydl_opts)
-                    if cookie_file:
-                        opts["cookiefile"] = cookie_file
-                    else:
-                        opts["extractor_args"] = {
-                            "youtube": {
-                                "player_client": ["android", "ios", "web"],
-                            }
-                        }
+                    t0 = time.perf_counter()
+                    proxy_used = proxy_candidate
 
-                    if proxy_candidate:
-                        opts["proxy"] = proxy_candidate
+                    if is_youtube:
+                        ydl_opts, _ = YouTubeExtractorConfig.build_download_opts(
+                            output_template=out_template,
+                            format_id=format_id,
+                            target_format=target_format,
+                            proxy=proxy_candidate,
+                            cookie_file=cookie_file,
+                            progress_hook=progress_hook,
+                            timeout=30
+                        )
+                    else:
+                        # Non-YouTube platforms (TikTok, Instagram, Twitter, Reddit, etc.)
+                        fmt_selector = format_id if format_id and format_id not in ["best", "direct"] else "bestvideo+bestaudio/best"
+                        ydl_opts = {
+                            "format": fmt_selector,
+                            "outtmpl": out_template,
+                            "merge_output_format": "mp4",
+                            "noplaylist": True,
+                            "progress_hooks": [progress_hook],
+                            "quiet": True,
+                            "no_warnings": True,
+                            "user_agent": settings.USER_AGENT,
+                            "max_filesize": settings.MAX_FILE_SIZE_BYTES,
+                            "socket_timeout": 30,
+                        }
+                        if cookie_file:
+                            ydl_opts["cookiefile"] = cookie_file
+                        if proxy_candidate:
+                            ydl_opts["proxy"] = proxy_candidate
 
                     try:
-                        with yt_dlp.YoutubeDL(opts) as ydl:
+                        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                             info = ydl.extract_info(url, download=True)
-                            return info
+                            if info:
+                                video_id = info.get("id") or info.get("display_id")
+                                latency_ms = round((time.perf_counter() - t0) * 1000, 2)
+                                proxy_manager.report_success(proxy_candidate, latency_ms)
+                                return info
                     except Exception as err:
                         last_error = err
+                        proxy_manager.report_failure(proxy_candidate, err)
+                        code, _, _, is_retryable = classify_youtube_error(err)
+                        if not is_retryable:
+                            raise err
                         continue
 
                 if last_error:
                     raise last_error
                 raise ProcessingError("Could not initiate download with available endpoints.")
 
-            info = await loop.run_in_executor(None, _sync_download)
+            with ExtractionTimer() as timer:
+                info = await loop.run_in_executor(None, _sync_download)
 
             # Find the generated file in TEMP_STORAGE_DIR
             matching_files = list(settings.TEMP_STORAGE_DIR.glob(f"{job_id}_{safe_name}.*"))
             if not matching_files:
-                # Try generic match with job_id
                 matching_files = [f for f in settings.TEMP_STORAGE_DIR.glob(f"{job_id}_*") if not f.name.endswith(".tmp")]
 
             if not matching_files:
@@ -312,18 +317,55 @@ class DownloadManager:
             job.filesize_bytes = final_size
             job.filesize_formatted = format_bytes(final_size)
 
+            log_extraction_event(
+                platform=domain,
+                video_id=video_id,
+                extractor="ytdlp",
+                action="download",
+                duration_ms=timer.duration_ms,
+                result="success",
+                proxy_used=proxy_used,
+                format_requested=target_format or format_id,
+                file_size_bytes=final_size
+            )
+
         except asyncio.CancelledError:
             job.status = "cancelled"
             job.message = "Download cancelled"
+            self._cleanup_partial_files(job_id)
         except Exception as e:
+            code, user_msg, _, _ = classify_youtube_error(e)
             job.status = "failed"
-            job.error = str(e)
-            job.message = f"Download failed: {str(e)}"
+            job.error = user_msg
+            job.message = f"Download failed: {user_msg}"
+            self._cleanup_partial_files(job_id)
+
+            log_extraction_event(
+                platform=domain,
+                video_id=video_id,
+                extractor="ytdlp",
+                action="download",
+                duration_ms=0.0,
+                result="failed",
+                proxy_used=proxy_used,
+                format_requested=target_format or format_id,
+                failure_category=code.value,
+                error_message=user_msg
+            )
+
+    def _cleanup_partial_files(self, job_id: str):
+        """Cleans up any partial or temporary files associated with a job ID."""
+        try:
+            for p in settings.TEMP_STORAGE_DIR.glob(f"{job_id}_*"):
+                if p.exists():
+                    p.unlink()
+        except Exception:
+            pass
 
     async def start_batch_download(
         self,
         job_id: str,
-        items: list[dict[str, Any]],  # list of {"url": "...", "title": "...", "format": "..."}
+        items: list[dict[str, Any]],
         archive_name: str = "media_bundle"
     ):
         job = self.get_job(job_id)
@@ -337,8 +379,10 @@ class DownloadManager:
 
             downloaded_files: list[tuple[Path, str]] = []
             total = len(items)
+            active_proxy = proxy_manager.get_proxy()
 
             async with httpx.AsyncClient(
+                proxy=active_proxy,
                 timeout=settings.REQUEST_TIMEOUT_SECONDS,
                 follow_redirects=True,
                 headers={"User-Agent": settings.USER_AGENT}
@@ -379,12 +423,19 @@ class DownloadManager:
             def update_zip_progress(p):
                 job.progress = 85.0 + (p * 0.14)
 
-            await media_archiver.create_zip_archive(downloaded_files, zip_path, update_zip_progress)
+            await media_archiver.create_zip(
+                files=downloaded_files,
+                output_zip_path=zip_path,
+                progress_callback=update_zip_progress
+            )
 
-            # Cleanup sub temp files
-            for fpath, _ in downloaded_files:
-                if fpath.exists():
-                    fpath.unlink()
+            # Cleanup sub files
+            for temp_f, _ in downloaded_files:
+                if temp_f.exists():
+                    try:
+                        temp_f.unlink()
+                    except Exception:
+                        pass
 
             final_size = zip_path.stat().st_size
             job.status = "completed"
@@ -398,10 +449,12 @@ class DownloadManager:
         except asyncio.CancelledError:
             job.status = "cancelled"
             job.message = "Batch download cancelled"
+            self._cleanup_partial_files(job_id)
         except Exception as e:
             job.status = "failed"
             job.error = str(e)
             job.message = f"Batch archive failed: {str(e)}"
+            self._cleanup_partial_files(job_id)
 
 
 download_manager = DownloadManager()

@@ -115,7 +115,9 @@ class DownloadManager:
             temp_filename = f"{job_id}_{safe_name}.tmp"
             temp_path = settings.TEMP_STORAGE_DIR / temp_filename
 
+            active_proxy = proxy_manager.get_proxy()
             async with httpx.AsyncClient(
+                proxy=active_proxy,
                 timeout=settings.MAX_DOWNLOAD_DURATION_SECONDS,
                 follow_redirects=True,
                 headers={"User-Agent": settings.USER_AGENT}
@@ -253,24 +255,38 @@ class DownloadManager:
             }
 
             # Optional cookies and proxy for cloud deployments
-            cookie_file = get_cookie_file_path()
-            if cookie_file:
-                ydl_opts["cookiefile"] = cookie_file
-            else:
-                ydl_opts["extractor_args"] = {
-                    "youtube": {
-                        "player_client": ["android", "ios", "web"],
-                    }
-                }
-
-            active_proxy = proxy_manager.get_proxy()
-            if active_proxy:
-                ydl_opts["proxy"] = active_proxy
-
             def _sync_download():
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    info = ydl.extract_info(url, download=True)
-                    return info
+                cookie_file = get_cookie_file_path()
+                proxies_to_try = proxy_manager.get_all_proxies()
+                if not proxies_to_try:
+                    proxies_to_try = [None]
+
+                last_error = None
+                for proxy_candidate in proxies_to_try:
+                    opts = dict(ydl_opts)
+                    if cookie_file:
+                        opts["cookiefile"] = cookie_file
+                    else:
+                        opts["extractor_args"] = {
+                            "youtube": {
+                                "player_client": ["android", "ios", "web"],
+                            }
+                        }
+
+                    if proxy_candidate:
+                        opts["proxy"] = proxy_candidate
+
+                    try:
+                        with yt_dlp.YoutubeDL(opts) as ydl:
+                            info = ydl.extract_info(url, download=True)
+                            return info
+                    except Exception as err:
+                        last_error = err
+                        continue
+
+                if last_error:
+                    raise last_error
+                raise ProcessingError("Could not initiate download with available endpoints.")
 
             info = await loop.run_in_executor(None, _sync_download)
 

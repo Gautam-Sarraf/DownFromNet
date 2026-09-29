@@ -15,6 +15,7 @@ from app.core.errors import (
     JobNotFoundError,
     MediaNotFoundError
 )
+from app.core.proxy import proxy_manager
 from app.core.security import sanitize_filename, validate_url_security
 from app.schemas.download import DownloadJobStatus, DownloadStatus
 from app.services.converter import media_converter
@@ -267,8 +268,9 @@ class DownloadManager:
                     }
                 }
 
-            if settings.PROXY_URL:
-                ydl_opts["proxy"] = settings.PROXY_URL
+            active_proxy = proxy_manager.get_proxy()
+            if active_proxy:
+                ydl_opts["proxy"] = active_proxy
 
             def _sync_download():
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:

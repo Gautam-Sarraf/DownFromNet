@@ -36,6 +36,7 @@ class Settings(BaseSettings):
 
     # Optional Proxy and YouTube Cookies (for cloud deployments)
     PROXY_URL: str | None = None
+    PROXY_LIST: str | None = None
     COOKIES_FILE_PATH: str | None = None
     COOKIES_TXT_CONTENT: str | None = None
 

@@ -3,6 +3,7 @@ from typing import Any, Optional
 import yt_dlp
 from app.core.config import settings
 from app.core.errors import MediaNotFoundError, MediaAccessDeniedError
+from app.core.proxy import proxy_manager
 from app.extractors.base import BaseExtractor
 from app.schemas.media import MediaAnalysisResponse, MediaItem, MediaFormat
 from app.utils.mime import format_bytes, format_duration
@@ -63,8 +64,9 @@ class YtDlpExtractor(BaseExtractor):
                 }
             }
 
-        if settings.PROXY_URL:
-            ydl_opts["proxy"] = settings.PROXY_URL
+        active_proxy = proxy_manager.get_proxy()
+        if active_proxy:
+            ydl_opts["proxy"] = active_proxy
 
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -85,8 +87,11 @@ class YtDlpExtractor(BaseExtractor):
             }
             if cookie_file:
                 fallback_opts["cookiefile"] = cookie_file
-            if settings.PROXY_URL:
-                fallback_opts["proxy"] = settings.PROXY_URL
+            
+            # Try a new proxy on fallback if available
+            fb_proxy = proxy_manager.get_proxy() or active_proxy
+            if fb_proxy:
+                fallback_opts["proxy"] = fb_proxy
 
             with yt_dlp.YoutubeDL(fallback_opts) as ydl_fb:
                 info = ydl_fb.extract_info(url, download=False)

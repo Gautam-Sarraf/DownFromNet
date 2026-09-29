@@ -248,6 +248,7 @@ class DownloadManager:
                 "user_agent": settings.USER_AGENT,
                 "max_filesize": settings.MAX_FILE_SIZE_BYTES,
                 "postprocessors": postprocessors,
+                "js_runtimes": {"node": {}},
             }
 
             # Optional cookies and proxy for cloud deployments

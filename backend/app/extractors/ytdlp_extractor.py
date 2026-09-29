@@ -48,10 +48,11 @@ class YtDlpExtractor(BaseExtractor):
             "skip_download": True,
             "extract_flat": False,
             "user_agent": settings.USER_AGENT,
-            "socket_timeout": settings.REQUEST_TIMEOUT_SECONDS,
+            "socket_timeout": 12,
             "ignoreerrors": False,
             "no_color": True,
             "format": "bestvideo+bestaudio/best/bv*+ba/b",
+            "js_runtimes": {"node": {}},
         }
 
         if cookie_file:
@@ -80,15 +81,16 @@ class YtDlpExtractor(BaseExtractor):
                 "no_warnings": True,
                 "skip_download": True,
                 "extract_flat": False,
-                "socket_timeout": settings.REQUEST_TIMEOUT_SECONDS,
+                "socket_timeout": 12,
                 "ignoreerrors": True,
                 "no_color": True,
                 "format": "best",
+                "js_runtimes": {"node": {}},
             }
             if cookie_file:
                 fallback_opts["cookiefile"] = cookie_file
             
-            # Try a new proxy on fallback if available
+            # Try a fresh proxy on fallback if available
             fb_proxy = proxy_manager.get_proxy() or active_proxy
             if fb_proxy:
                 fallback_opts["proxy"] = fb_proxy

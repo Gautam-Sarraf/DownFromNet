@@ -249,11 +249,22 @@ class DownloadManager:
                 "postprocessors": postprocessors,
                 "extractor_args": {
                     "youtube": {
-                        "player_client": ["android", "ios", "web"],
+                        "player_client": ["android", "ios", "mweb", "web"],
                         "player_skip": ["webpage", "configs"],
                     }
                 },
             }
+
+            # Optional cookies and proxy for cloud deployments
+            if settings.COOKIES_FILE_PATH and Path(settings.COOKIES_FILE_PATH).exists():
+                ydl_opts["cookiefile"] = settings.COOKIES_FILE_PATH
+            elif settings.COOKIES_TXT_CONTENT and settings.COOKIES_TXT_CONTENT.strip():
+                cookie_file = settings.TEMP_STORAGE_DIR / "cookies.txt"
+                cookie_file.write_text(settings.COOKIES_TXT_CONTENT.strip(), encoding="utf-8")
+                ydl_opts["cookiefile"] = str(cookie_file)
+
+            if settings.PROXY_URL:
+                ydl_opts["proxy"] = settings.PROXY_URL
 
             def _sync_download():
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:

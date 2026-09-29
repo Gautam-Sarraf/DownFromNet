@@ -34,6 +34,11 @@ class Settings(BaseSettings):
         "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
     )
 
+    # Optional Proxy and YouTube Cookies (for cloud deployments)
+    PROXY_URL: str | None = None
+    COOKIES_FILE_PATH: str | None = None
+    COOKIES_TXT_CONTENT: str | None = None
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

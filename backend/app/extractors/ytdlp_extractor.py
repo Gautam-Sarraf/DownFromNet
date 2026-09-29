@@ -28,8 +28,17 @@ class YtDlpExtractor(BaseExtractor):
             return True
         return False
 
+    def _get_cookie_file(self) -> Optional[str]:
+        if settings.COOKIES_FILE_PATH and Path(settings.COOKIES_FILE_PATH).exists():
+            return settings.COOKIES_FILE_PATH
+        if settings.COOKIES_TXT_CONTENT and settings.COOKIES_TXT_CONTENT.strip():
+            cookie_file = settings.TEMP_STORAGE_DIR / "cookies.txt"
+            cookie_file.write_text(settings.COOKIES_TXT_CONTENT.strip(), encoding="utf-8")
+            return str(cookie_file)
+        return None
+
     def _sync_extract_info(self, url: str) -> dict[str, Any]:
-        ydl_opts = {
+        ydl_opts: dict[str, Any] = {
             "quiet": True,
             "no_warnings": True,
             "skip_download": True,
@@ -40,11 +49,19 @@ class YtDlpExtractor(BaseExtractor):
             "no_color": True,
             "extractor_args": {
                 "youtube": {
-                    "player_client": ["android", "ios", "web"],
+                    "player_client": ["android", "ios", "mweb", "web"],
                     "player_skip": ["webpage", "configs"],
                 }
             },
         }
+
+        cookie_file = self._get_cookie_file()
+        if cookie_file:
+            ydl_opts["cookiefile"] = cookie_file
+
+        if settings.PROXY_URL:
+            ydl_opts["proxy"] = settings.PROXY_URL
+
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
             return info
@@ -56,10 +73,11 @@ class YtDlpExtractor(BaseExtractor):
         try:
             info = await loop.run_in_executor(None, self._sync_extract_info, url)
         except yt_dlp.utils.DownloadError as e:
-            err_msg = str(e).lower()
-            if any(k in err_msg for k in ["private", "login", "authenticate", "forbidden", "403"]):
-                raise MediaAccessDeniedError()
-            raise MediaNotFoundError("Could not extract media metadata from this link.")
+            err_msg = str(e)
+            err_lower = err_msg.lower()
+            if any(k in err_lower for k in ["private", "login", "authenticate", "forbidden", "403", "bot", "sign in"]):
+                raise MediaAccessDeniedError(f"Platform restricted access: {err_msg.split('ERROR:')[-1].strip()}")
+            raise MediaNotFoundError(f"Could not extract media metadata: {err_msg.split('ERROR:')[-1].strip()}")
         except Exception as e:
             raise MediaNotFoundError(f"Media extraction failed: {str(e)}")
 

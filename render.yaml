@@ -1,7 +1,7 @@
 services:
   - type: web
     name: downfromnet-backend
-    env: docker
+    runtime: docker
     dockerfilePath: ./backend/Dockerfile
     dockerContext: ./backend
     plan: free
@@ -30,8 +30,9 @@ services:
       - key: ALLOW_PRIVATE_IPS
         value: "false"
 
-  - type: static
+  - type: web
     name: downfromnet-frontend
+    runtime: static
     rootDir: frontend
     buildCommand: npm install && npm run build
     staticPublishPath: ./dist
@@ -46,4 +47,3 @@ services:
           name: downfromnet-backend
           property: host
         transform: https://${host}/api
-

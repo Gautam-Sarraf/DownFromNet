@@ -17,5 +17,20 @@ export default defineConfig({
         changeOrigin: true,
       }
     }
+  },
+  build: {
+    target: 'es2020',
+    minify: 'esbuild',
+    cssCodeSplit: true,
+    chunkSizeWarningLimit: 600,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom'],
+          'vendor-icons': ['lucide-react'],
+          'vendor-utils': ['axios', 'clsx', 'tailwind-merge']
+        }
+      }
+    }
   }
 })

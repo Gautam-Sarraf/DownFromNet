@@ -35,7 +35,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenHistory, historyCount }) =
         </div>
 
         {/* Center / Navigation Links (Apple/Arc clean style) */}
-        <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-slate-600">
+        <nav aria-label="Main navigation" className="hidden md:flex items-center gap-6 text-sm font-medium text-slate-600">
           <a href="#downloader" className="hover:text-slate-900 transition-colors">Downloader</a>
           <a href="#platforms" className="hover:text-slate-900 transition-colors">Platforms</a>
           <a href="#how-to-use" className="hover:text-slate-900 transition-colors">How It Works</a>
@@ -45,7 +45,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenHistory, historyCount }) =
         {/* Action Controls */}
         <div className="flex items-center gap-2.5">
           {/* Server Status Indicator */}
-          <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-50 border border-slate-200 text-xs text-slate-600">
+          <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-50 border border-slate-200 text-xs text-slate-600" aria-label="Engine status">
             <span className={`w-2 h-2 rounded-full ${isServerHealthy === true ? 'bg-emerald-500' : isServerHealthy === false ? 'bg-rose-500' : 'bg-amber-400 animate-ping'}`} />
             <span className="font-medium">{isServerHealthy ? 'Engine Online' : 'Connecting...'}</span>
           </div>
@@ -53,10 +53,11 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenHistory, historyCount }) =
           {/* History Button */}
           <button
             onClick={onOpenHistory}
-            className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white hover:bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-700 transition-all shadow-xs hover:border-slate-300 active:scale-95"
+            aria-label={`View download history, ${historyCount} items saved`}
+            className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white hover:bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-700 transition-all shadow-xs hover:border-slate-300 active:scale-95 cursor-pointer"
             title="View Download History"
           >
-            <History className="w-3.5 h-3.5 text-slate-500" />
+            <History className="w-3.5 h-3.5 text-slate-500" aria-hidden="true" />
             <span>History</span>
             {historyCount > 0 && (
               <span className="px-1.5 py-0.2 text-[10px] font-bold bg-slate-900 text-white rounded-full">

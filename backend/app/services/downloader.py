@@ -249,8 +249,7 @@ class DownloadManager:
                 "postprocessors": postprocessors,
                 "extractor_args": {
                     "youtube": {
-                        "player_client": ["android", "ios", "mweb", "web"],
-                        "player_skip": ["webpage", "configs"],
+                        "player_client": ["web", "mweb", "android", "ios"],
                     }
                 },
             }

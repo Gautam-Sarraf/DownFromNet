@@ -8,15 +8,18 @@ FROM python:3.11-slim
 COPY --from=ffmpeg-source /ffmpeg /usr/local/bin/
 COPY --from=ffmpeg-source /ffprobe /usr/local/bin/
 
-# Install basic network utilities
+# Install basic network utilities and Node.js (needed by yt-dlp for JS challenge solving)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
+    nodejs \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -U pip && \
+    pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir -U yt-dlp
 
 COPY . .
 

@@ -247,20 +247,25 @@ class DownloadManager:
                 "user_agent": settings.USER_AGENT,
                 "max_filesize": settings.MAX_FILE_SIZE_BYTES,
                 "postprocessors": postprocessors,
-                "extractor_args": {
-                    "youtube": {
-                        "player_client": ["web", "mweb", "android", "ios"],
-                    }
-                },
             }
 
             # Optional cookies and proxy for cloud deployments
+            has_cookies = False
             if settings.COOKIES_FILE_PATH and Path(settings.COOKIES_FILE_PATH).exists():
                 ydl_opts["cookiefile"] = settings.COOKIES_FILE_PATH
+                has_cookies = True
             elif settings.COOKIES_TXT_CONTENT and settings.COOKIES_TXT_CONTENT.strip():
                 cookie_file = settings.TEMP_STORAGE_DIR / "cookies.txt"
                 cookie_file.write_text(settings.COOKIES_TXT_CONTENT.strip(), encoding="utf-8")
                 ydl_opts["cookiefile"] = str(cookie_file)
+                has_cookies = True
+
+            if not has_cookies:
+                ydl_opts["extractor_args"] = {
+                    "youtube": {
+                        "player_client": ["android", "ios", "web"],
+                    }
+                }
 
             if settings.PROXY_URL:
                 ydl_opts["proxy"] = settings.PROXY_URL

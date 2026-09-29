@@ -38,6 +38,9 @@ class YtDlpExtractor(BaseExtractor):
         return None
 
     def _sync_extract_info(self, url: str) -> dict[str, Any]:
+        cookie_file = self._get_cookie_file()
+
+        # Primary configuration
         ydl_opts: dict[str, Any] = {
             "quiet": True,
             "no_warnings": True,
@@ -47,23 +50,51 @@ class YtDlpExtractor(BaseExtractor):
             "socket_timeout": settings.REQUEST_TIMEOUT_SECONDS,
             "ignoreerrors": False,
             "no_color": True,
-            "extractor_args": {
-                "youtube": {
-                    "player_client": ["web", "mweb", "android", "ios"],
-                }
-            },
+            "format": "bestvideo+bestaudio/best/bv*+ba/b",
         }
 
-        cookie_file = self._get_cookie_file()
         if cookie_file:
             ydl_opts["cookiefile"] = cookie_file
+        else:
+            # If no cookies, try mobile client rotation
+            ydl_opts["extractor_args"] = {
+                "youtube": {
+                    "player_client": ["android", "ios", "web"],
+                }
+            }
 
         if settings.PROXY_URL:
             ydl_opts["proxy"] = settings.PROXY_URL
 
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
-            return info
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+                if info:
+                    return info
+        except Exception as primary_err:
+            # Fallback configuration with lenient format selector
+            fallback_opts: dict[str, Any] = {
+                "quiet": True,
+                "no_warnings": True,
+                "skip_download": True,
+                "extract_flat": False,
+                "socket_timeout": settings.REQUEST_TIMEOUT_SECONDS,
+                "ignoreerrors": True,
+                "no_color": True,
+                "format": "best",
+            }
+            if cookie_file:
+                fallback_opts["cookiefile"] = cookie_file
+            if settings.PROXY_URL:
+                fallback_opts["proxy"] = settings.PROXY_URL
+
+            with yt_dlp.YoutubeDL(fallback_opts) as ydl_fb:
+                info = ydl_fb.extract_info(url, download=False)
+                if info:
+                    return info
+            raise primary_err
+
+        return {}
 
     async def extract(self, url: str) -> MediaAnalysisResponse:
         domain = extract_domain(url)

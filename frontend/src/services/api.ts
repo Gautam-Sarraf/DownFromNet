@@ -65,7 +65,7 @@ export const api = {
   },
 
   async getHealth(): Promise<{ status: string; ffmpeg_available: boolean }> {
-    const response = await axios.get('/health');
+    const response = await apiClient.get('/health');
     return response.data;
   }
 };

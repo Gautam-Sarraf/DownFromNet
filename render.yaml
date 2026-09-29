@@ -29,3 +29,21 @@ services:
         value: "15"
       - key: ALLOW_PRIVATE_IPS
         value: "false"
+
+  - type: static
+    name: downfromnet-frontend
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: ./dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_API_URL
+        fromService:
+          type: web
+          name: downfromnet-backend
+          property: host
+        transform: https://${host}/api
+

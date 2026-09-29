@@ -9,6 +9,7 @@ import aiofiles
 import httpx
 import yt_dlp
 from app.core.config import settings
+from app.core.cookies import get_cookie_file_path
 from app.core.errors import (
     FileSizeLimitExceededError,
     ProcessingError,
@@ -252,17 +253,10 @@ class DownloadManager:
             }
 
             # Optional cookies and proxy for cloud deployments
-            has_cookies = False
-            if settings.COOKIES_FILE_PATH and Path(settings.COOKIES_FILE_PATH).exists():
-                ydl_opts["cookiefile"] = settings.COOKIES_FILE_PATH
-                has_cookies = True
-            elif settings.COOKIES_TXT_CONTENT and settings.COOKIES_TXT_CONTENT.strip():
-                cookie_file = settings.TEMP_STORAGE_DIR / "cookies.txt"
-                cookie_file.write_text(settings.COOKIES_TXT_CONTENT.strip(), encoding="utf-8")
-                ydl_opts["cookiefile"] = str(cookie_file)
-                has_cookies = True
-
-            if not has_cookies:
+            cookie_file = get_cookie_file_path()
+            if cookie_file:
+                ydl_opts["cookiefile"] = cookie_file
+            else:
                 ydl_opts["extractor_args"] = {
                     "youtube": {
                         "player_client": ["android", "ios", "web"],

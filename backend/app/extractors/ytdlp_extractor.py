@@ -2,6 +2,7 @@ import asyncio
 from typing import Any, Optional
 import yt_dlp
 from app.core.config import settings
+from app.core.cookies import get_cookie_file_path
 from app.core.errors import MediaNotFoundError, MediaAccessDeniedError
 from app.core.proxy import proxy_manager
 from app.extractors.base import BaseExtractor
@@ -29,17 +30,8 @@ class YtDlpExtractor(BaseExtractor):
             return True
         return False
 
-    def _get_cookie_file(self) -> Optional[str]:
-        if settings.COOKIES_FILE_PATH and Path(settings.COOKIES_FILE_PATH).exists():
-            return settings.COOKIES_FILE_PATH
-        if settings.COOKIES_TXT_CONTENT and settings.COOKIES_TXT_CONTENT.strip():
-            cookie_file = settings.TEMP_STORAGE_DIR / "cookies.txt"
-            cookie_file.write_text(settings.COOKIES_TXT_CONTENT.strip(), encoding="utf-8")
-            return str(cookie_file)
-        return None
-
     def _sync_extract_info(self, url: str) -> dict[str, Any]:
-        cookie_file = self._get_cookie_file()
+        cookie_file = get_cookie_file_path()
 
         # Primary configuration
         ydl_opts: dict[str, Any] = {
@@ -112,7 +104,11 @@ class YtDlpExtractor(BaseExtractor):
         except yt_dlp.utils.DownloadError as e:
             err_msg = str(e)
             err_lower = err_msg.lower()
-            if any(k in err_lower for k in ["private", "login", "authenticate", "forbidden", "403", "bot", "sign in"]):
+            if "unavailable" in err_lower or "not available" in err_lower or "deleted" in err_lower:
+                raise MediaNotFoundError("This video is unavailable or has been removed from YouTube.")
+            if "private" in err_lower:
+                raise MediaAccessDeniedError("This video is private.")
+            if any(k in err_lower for k in ["login", "authenticate", "forbidden", "403", "bot", "sign in"]):
                 raise MediaAccessDeniedError(f"Platform restricted access: {err_msg.split('ERROR:')[-1].strip()}")
             raise MediaNotFoundError(f"Could not extract media metadata: {err_msg.split('ERROR:')[-1].strip()}")
         except Exception as e:

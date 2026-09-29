@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     PROXY_LIST: str | None = None
     COOKIES_FILE_PATH: str | None = None
     COOKIES_TXT_CONTENT: str | None = None
+    YOUTUBE_PO_TOKEN: str | None = None
 
     model_config = SettingsConfigDict(
         env_file=".env",

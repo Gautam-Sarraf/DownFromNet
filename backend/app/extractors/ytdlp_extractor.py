@@ -32,67 +32,56 @@ class YtDlpExtractor(BaseExtractor):
 
     def _sync_extract_info(self, url: str) -> dict[str, Any]:
         cookie_file = get_cookie_file_path()
+        proxies_to_try = proxy_manager.get_all_proxies()
+        if not proxies_to_try:
+            proxies_to_try = [None]
 
-        # Primary configuration
-        ydl_opts: dict[str, Any] = {
-            "quiet": True,
-            "no_warnings": True,
-            "skip_download": True,
-            "extract_flat": False,
-            "user_agent": settings.USER_AGENT,
-            "socket_timeout": 12,
-            "ignoreerrors": False,
-            "no_color": True,
-            "format": "bestvideo+bestaudio/best/bv*+ba/b",
-            "js_runtimes": {"node": {}},
-        }
+        last_error = None
 
-        if cookie_file:
-            ydl_opts["cookiefile"] = cookie_file
-        else:
-            # If no cookies, try mobile client rotation
-            ydl_opts["extractor_args"] = {
-                "youtube": {
-                    "player_client": ["android", "ios", "web"],
-                }
-            }
-
-        active_proxy = proxy_manager.get_proxy()
-        if active_proxy:
-            ydl_opts["proxy"] = active_proxy
-
-        try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(url, download=False)
-                if info:
-                    return info
-        except Exception as primary_err:
-            # Fallback configuration with lenient format selector
-            fallback_opts: dict[str, Any] = {
+        for proxy_candidate in proxies_to_try:
+            ydl_opts: dict[str, Any] = {
                 "quiet": True,
                 "no_warnings": True,
                 "skip_download": True,
                 "extract_flat": False,
-                "socket_timeout": 12,
-                "ignoreerrors": True,
+                "user_agent": settings.USER_AGENT,
+                "socket_timeout": 10,
+                "ignoreerrors": False,
                 "no_color": True,
-                "format": "best",
+                "format": "bestvideo+bestaudio/best/bv*+ba/b",
                 "js_runtimes": {"node": {}},
             }
+
             if cookie_file:
-                fallback_opts["cookiefile"] = cookie_file
-            
-            # Try a fresh proxy on fallback if available
-            fb_proxy = proxy_manager.get_proxy() or active_proxy
-            if fb_proxy:
-                fallback_opts["proxy"] = fb_proxy
+                ydl_opts["cookiefile"] = cookie_file
+            else:
+                ydl_opts["extractor_args"] = {
+                    "youtube": {
+                        "player_client": ["android", "ios", "web"],
+                    }
+                }
 
-            with yt_dlp.YoutubeDL(fallback_opts) as ydl_fb:
-                info = ydl_fb.extract_info(url, download=False)
-                if info:
-                    return info
-            raise primary_err
+            if settings.YOUTUBE_PO_TOKEN:
+                ydl_opts.setdefault("extractor_args", {}).setdefault("youtube", {})["po_token"] = [
+                    f"web.gvs+{settings.YOUTUBE_PO_TOKEN}",
+                    f"web.player+{settings.YOUTUBE_PO_TOKEN}",
+                ]
 
+            if proxy_candidate:
+                ydl_opts["proxy"] = proxy_candidate
+
+            try:
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    info = ydl.extract_info(url, download=False)
+                    if info:
+                        return info
+            except Exception as err:
+                last_error = err
+                # Try next proxy in the pool
+                continue
+
+        if last_error:
+            raise last_error
         return {}
 
     async def extract(self, url: str) -> MediaAnalysisResponse:

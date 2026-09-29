@@ -247,6 +247,12 @@ class DownloadManager:
                 "user_agent": settings.USER_AGENT,
                 "max_filesize": settings.MAX_FILE_SIZE_BYTES,
                 "postprocessors": postprocessors,
+                "extractor_args": {
+                    "youtube": {
+                        "player_client": ["android", "ios", "web"],
+                        "player_skip": ["webpage", "configs"],
+                    }
+                },
             }
 
             def _sync_download():

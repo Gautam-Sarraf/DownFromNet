@@ -38,6 +38,12 @@ class YtDlpExtractor(BaseExtractor):
             "socket_timeout": settings.REQUEST_TIMEOUT_SECONDS,
             "ignoreerrors": False,
             "no_color": True,
+            "extractor_args": {
+                "youtube": {
+                    "player_client": ["android", "ios", "web"],
+                    "player_skip": ["webpage", "configs"],
+                }
+            },
         }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)

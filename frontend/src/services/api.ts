@@ -9,6 +9,13 @@ const apiClient = axios.create({
   timeout: 30000,
 });
 
+apiClient.interceptors.response.use((response) => {
+  if (typeof response.data === 'string' && (response.data.trim().startsWith('<!doctype html') || response.data.trim().startsWith('<!DOCTYPE html') || response.data.trim().startsWith('<html'))) {
+    throw new Error('API endpoint returned HTML instead of API data. Ensure VITE_API_URL points to your backend URL (e.g. https://downfromnet-backend.onrender.com/api).');
+  }
+  return response;
+});
+
 export const api = {
   // Analyze URL
   async analyzeUrl(url: string): Promise<MediaAnalysisResponse> {

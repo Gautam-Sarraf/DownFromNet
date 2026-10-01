@@ -1,6 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { DownloadCloud, History, Globe, Youtube, Facebook, Instagram, Music, Cloud, Bot, Sparkles, ChevronDown } from 'lucide-react';
-import { api } from '../services/api';
+import React from 'react';
+import { History, Globe } from 'lucide-react';
 
 interface NavbarProps {
   onOpenHistory: () => void;
@@ -24,13 +23,6 @@ export const Navbar: React.FC<NavbarProps> = ({
   activePlatformId,
   onSelectPlatform
 }) => {
-  const [isServerHealthy, setIsServerHealthy] = useState<boolean | null>(null);
-
-  useEffect(() => {
-    api.getHealth()
-      .then(() => setIsServerHealthy(true))
-      .catch(() => setIsServerHealthy(false));
-  }, []);
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-slate-200/80 bg-white/85 backdrop-blur-md transition-colors">
@@ -56,16 +48,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Center / Navigation Links for Dedicated Platform Pages (SEO Link Architecture) */}
         <nav aria-label="Main platform navigation" className="hidden lg:flex items-center gap-1 text-xs font-semibold text-slate-600">
-          <button
-            onClick={() => onSelectPlatform('')}
-            className={`px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
-              activePlatformId === 'home'
-                ? 'bg-slate-100 text-slate-900 font-bold'
-                : 'hover:text-slate-900 hover:bg-slate-50'
-            }`}
-          >
-            All Platforms
-          </button>
+          
 
           {NAV_PLATFORMS.map((item) => {
             const isActive = activePlatformId === item.id;
@@ -87,12 +70,6 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Action Controls */}
         <div className="flex items-center gap-2.5">
-          {/* Server Status Indicator */}
-          <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-50 border border-slate-200 text-xs text-slate-600" aria-label="Engine status">
-            <span className={`w-2 h-2 rounded-full ${isServerHealthy === true ? 'bg-emerald-500' : isServerHealthy === false ? 'bg-rose-500' : 'bg-amber-400 animate-ping'}`} />
-            <span className="font-medium">{isServerHealthy ? 'Engine Online' : 'Connecting...'}</span>
-          </div>
-
           {/* History Button */}
           <button
             onClick={onOpenHistory}

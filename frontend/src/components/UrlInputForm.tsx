@@ -4,14 +4,7 @@ import {
   Clipboard, 
   X, 
   Loader2, 
-  ArrowRight, 
-  Globe,
-  Youtube,
-  Facebook,
-  Instagram,
-  Bot,
-  Music,
-  Cloud
+  ArrowRight 
 } from 'lucide-react';
 import { PlatformConfig, PLATFORMS_MAP } from '../config/platforms';
 import { isValidHttpUrl } from '../utils/formatters';
@@ -26,15 +19,7 @@ interface UrlInputFormProps {
   onSelectPlatform: (slug: string) => void;
 }
 
-const PLATFORM_PILLS = [
-  { id: 'home', slug: '', label: 'All Platforms', icon: Globe },
-  { id: 'youtube', slug: 'youtube-downloader', label: 'YouTube', icon: Youtube },
-  { id: 'instagram', slug: 'instagram-downloader', label: 'Instagram', icon: Instagram },
-  { id: 'facebook', slug: 'facebook-downloader', label: 'Facebook', icon: Facebook },
-  { id: 'tiktok', slug: 'tiktok-downloader', label: 'TikTok', icon: Music },
-  { id: 'twitter', slug: 'twitter-downloader', label: 'Twitter / X', icon: Cloud },
-  { id: 'reddit', slug: 'reddit-downloader', label: 'Reddit', icon: Bot },
-];
+
 
 export const UrlInputForm: React.FC<UrlInputFormProps> = ({
   url,
@@ -81,28 +66,7 @@ export const UrlInputForm: React.FC<UrlInputFormProps> = ({
 
   return (
     <div id="downloader" className="w-full max-w-4xl mx-auto text-center space-y-6 pt-2 sm:pt-6">
-      {/* Platform Navigation Pills */}
-      <div className="flex flex-wrap items-center justify-center gap-1.5 sm:gap-2 p-1.5 rounded-2xl bg-white/80 backdrop-blur-xs border border-slate-200/80 shadow-2xs max-w-fit mx-auto">
-        {PLATFORM_PILLS.map((p) => {
-          const isCurrent = (p.id === platform.id);
-          const PillIcon = p.icon;
-          return (
-            <button
-              key={p.id}
-              type="button"
-              onClick={() => onSelectPlatform(p.slug)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer active:scale-95 ${
-                isCurrent
-                  ? 'bg-slate-900 text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
-              }`}
-            >
-              <PillIcon className="w-3.5 h-3.5" />
-              <span>{p.label}</span>
-            </button>
-          );
-        })}
-      </div>
+      
 
       {/* Hero Badge, H1 Tag & Subtitle tailored for SEO */}
       <div className="space-y-4">

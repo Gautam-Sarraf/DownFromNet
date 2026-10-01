@@ -10,13 +10,15 @@ import {
   Layers, 
   Sparkles,
   ExternalLink,
-  ShieldCheck
+  ShieldCheck,
+  Loader2
 } from 'lucide-react';
 import { MediaAnalysisResponse, MediaItem, MediaFormat } from '../types';
 import { formatBytes, formatDuration, getSourceBadgeColor } from '../utils/formatters';
 
 interface MediaPreviewCardProps {
   analysis: MediaAnalysisResponse;
+  isDownloading?: boolean;
   onDownload: (params: {
     url: string;
     media_item_id?: string;
@@ -30,6 +32,7 @@ interface MediaPreviewCardProps {
 
 export const MediaPreviewCard: React.FC<MediaPreviewCardProps> = ({
   analysis,
+  isDownloading = false,
   onDownload
 }) => {
   const item = analysis.items[0] || {
@@ -51,21 +54,28 @@ export const MediaPreviewCard: React.FC<MediaPreviewCardProps> = ({
 
   const [targetConversion, setTargetConversion] = useState<string>('original');
 
+  const [isLocallyProcessing, setIsLocallyProcessing] = useState(false);
+
   const selectedFormatObj = availableFormats.find(f => f.format_id === selectedFormatId) || availableFormats[0];
 
-  const handleDownloadClick = () => {
+  const handleDownloadClick = async () => {
+    setIsLocallyProcessing(true);
     const isPlatformExtractor = analysis.extractor_name === 'ytdlp';
     const directUrlToSend = (!isPlatformExtractor && (selectedFormatObj?.download_url || item.direct_url)) || undefined;
 
-    onDownload({
-      url: analysis.url,
-      media_item_id: item.id,
-      format_id: selectedFormatId,
-      target_format: targetConversion !== 'original' ? targetConversion : undefined,
-      quality: selectedFormatObj?.quality,
-      direct_url: directUrlToSend,
-      custom_filename: item.title
-    });
+    try {
+      await onDownload({
+        url: analysis.url,
+        media_item_id: item.id,
+        format_id: selectedFormatId,
+        target_format: targetConversion !== 'original' ? targetConversion : undefined,
+        quality: selectedFormatObj?.quality,
+        direct_url: directUrlToSend,
+        custom_filename: item.title
+      });
+    } finally {
+      setIsLocallyProcessing(false);
+    }
   };
 
   const renderPreviewElement = () => {
@@ -225,11 +235,25 @@ export const MediaPreviewCard: React.FC<MediaPreviewCardProps> = ({
           <div className="pt-2">
             <button
               onClick={handleDownloadClick}
+              disabled={isDownloading || isLocallyProcessing}
               aria-label={`Download media: ${item.title}`}
-              className="w-full flex items-center justify-center gap-2 py-3.5 px-6 rounded-xl bg-slate-900 hover:bg-black text-white font-bold text-base shadow-sm hover:shadow transition-all active:scale-[0.99] cursor-pointer"
+              className={`w-full flex items-center justify-center gap-2 py-3.5 px-6 rounded-xl font-bold text-base shadow-sm hover:shadow transition-all active:scale-[0.99] cursor-pointer ${
+                (isDownloading || isLocallyProcessing) 
+                  ? 'bg-slate-700 text-slate-200 cursor-not-allowed opacity-90' 
+                  : 'bg-slate-900 hover:bg-black text-white'
+              }`}
             >
-              <Download className="w-5 h-5 stroke-[2.2]" aria-hidden="true" />
-              <span>Download Media</span>
+              {(isDownloading || isLocallyProcessing) ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" />
+                  <span>Processing Media...</span>
+                </>
+              ) : (
+                <>
+                  <Download className="w-5 h-5 stroke-[2.2]" aria-hidden="true" />
+                  <span>Download Media</span>
+                </>
+              )}
             </button>
           </div>
         </div>

@@ -7,13 +7,15 @@ import {
   Image as ImageIcon, 
   Film, 
   Music, 
-  Check,
-  Sparkles
+  Check, 
+  Sparkles,
+  Loader2
 } from 'lucide-react';
 import { MediaAnalysisResponse, MediaItem } from '../types';
 
 interface MultiMediaGridProps {
   analysis: MediaAnalysisResponse;
+  isDownloading?: boolean;
   onDownloadSingle: (params: {
     url: string;
     media_item_id: string;
@@ -29,6 +31,7 @@ interface MultiMediaGridProps {
 
 export const MultiMediaGrid: React.FC<MultiMediaGridProps> = ({
   analysis,
+  isDownloading = false,
   onDownloadSingle,
   onDownloadBatch
 }) => {
@@ -106,16 +109,21 @@ export const MultiMediaGrid: React.FC<MultiMediaGridProps> = ({
 
           <button
             onClick={handleBatchDownloadSelected}
-            disabled={selectedIds.length === 0}
+            disabled={selectedIds.length === 0 || isDownloading}
             className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold bg-slate-900 hover:bg-black text-white rounded-xl shadow-xs transition-all disabled:opacity-40 disabled:pointer-events-none active:scale-95"
           >
-            <Archive className="w-4 h-4" />
-            <span>Download Selected ({selectedIds.length}) ZIP</span>
+            {isDownloading ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Archive className="w-4 h-4" />
+            )}
+            <span>{isDownloading ? 'Preparing ZIP...' : `Download Selected (${selectedIds.length}) ZIP`}</span>
           </button>
 
           <button
             onClick={handleBatchDownloadAll}
-            className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 rounded-xl transition-all active:scale-95"
+            disabled={isDownloading}
+            className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 rounded-xl transition-all active:scale-95 disabled:opacity-40"
           >
             <Download className="w-4 h-4" />
             <span>Download All ({analysis.items.length})</span>

@@ -278,9 +278,16 @@ class YtDlpExtractor(BaseExtractor):
             if f.get("ext") not in ["mhtml", "storyboard"] and f.get("format_note") != "storyboard"
         ]
 
-        # 1. Video Formats (DASH or combined, sorted descending by height and bitrate)
+        # 1. Video Formats (Prefer direct HTTPS DASH over rate-limited m3u8 streams)
+        def _format_sort_key(f):
+            height = f.get("height") or 0
+            protocol = f.get("protocol") or ""
+            raw_url = f.get("url") or ""
+            is_m3u8 = "m3u8" in protocol or ".m3u8" in raw_url or f.get("format_note") == "HLS"
+            return (height, not is_m3u8, f.get("tbr") or 0)
+
         video_formats = [f for f in valid_formats if f.get("vcodec") != "none"]
-        video_formats.sort(key=lambda x: (x.get("height") or 0, x.get("tbr") or 0), reverse=True)
+        video_formats.sort(key=_format_sort_key, reverse=True)
 
         quality_labels = {
             2160: "2160p (4K)",

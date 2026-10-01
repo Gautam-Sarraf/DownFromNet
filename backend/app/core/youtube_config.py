@@ -28,10 +28,8 @@ class YouTubeExtractorConfig:
         """
         yt_args: dict[str, Any] = {}
 
-        # Player clients (when cookies are not present, use mobile + web rotation)
-        if not has_cookies:
-            clients = player_clients or ["android", "ios", "web"]
-            yt_args["player_client"] = clients
+        if player_clients:
+            yt_args["player_client"] = player_clients
 
         # Proof of Origin (PO-Token)
         token = po_token or settings.YOUTUBE_PO_TOKEN
@@ -63,10 +61,9 @@ class YouTubeExtractorConfig:
                 return f"{format_id}/bestaudio/best", "mp3" if target_fmt == "mp3" else target_fmt
             return "bestaudio/best", "mp3" if target_fmt == "mp3" else target_fmt
 
-        # 2. Specific video stream selected (e.g. 1080p stream 137)
+        # 2. Specific video stream selected
         if format_id and format_id not in ["best", "direct"]:
-            # Combine selected video format with best available audio stream
-            selector = f"{format_id}+bestaudio/bestvideo+{format_id}/{format_id}/best"
+            selector = f"{format_id}+bestaudio[ext=m4a]/{format_id}+bestaudio/bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+{format_id}/{format_id}/best"
             if target_fmt in ["webm", "mkv", "mp4"]:
                 merge_format = target_fmt
             return selector, merge_format
@@ -75,7 +72,7 @@ class YouTubeExtractorConfig:
         if target_fmt in ["webm", "mkv", "mp4"]:
             merge_format = target_fmt
 
-        selector = "bestvideo+bestaudio/best"
+        selector = "bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best"
         return selector, merge_format
 
     @classmethod
@@ -160,6 +157,10 @@ class YouTubeExtractorConfig:
             "no_warnings": True,
             "user_agent": settings.USER_AGENT,
             "socket_timeout": sock_timeout,
+            "concurrent_fragment_downloads": 8,
+            "http_chunk_size": 10485760,
+            "retries": 10,
+            "fragment_retries": 10,
             "max_filesize": settings.MAX_FILE_SIZE_BYTES,
             "postprocessors": postprocessors,
             "js_runtimes": cls.get_js_runtimes(),

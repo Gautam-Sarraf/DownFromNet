@@ -2,11 +2,19 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { api } from '../services/api';
 import { DownloadJobStatus } from '../types';
 
-export function useDownloadManager() {
+export interface UseDownloadManagerOptions {
+  onCompleted?: (job: DownloadJobStatus) => void;
+  onError?: (error: string) => void;
+}
+
+export function useDownloadManager(options?: UseDownloadManagerOptions) {
   const [activeJob, setActiveJob] = useState<DownloadJobStatus | null>(null);
+  const [isDownloading, setIsDownloading] = useState<boolean>(false);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [history, setHistory] = useState<DownloadJobStatus[]>([]);
   const pollTimerRef = useRef<any>(null);
+  const optionsRef = useRef(options);
+  optionsRef.current = options;
 
   const fetchHistory = useCallback(async () => {
     try {
@@ -29,9 +37,10 @@ export function useDownloadManager() {
       if (status.status === 'completed') {
         clearInterval(pollTimerRef.current);
         pollTimerRef.current = null;
+        setIsDownloading(false);
         fetchHistory();
 
-        // Auto trigger browser download
+        // Auto trigger browser native download (Chrome / Opera / Edge / etc.)
         if (status.download_url) {
           const downloadUrl = status.download_url.startsWith('http')
             ? status.download_url
@@ -44,15 +53,29 @@ export function useDownloadManager() {
           a.click();
           document.body.removeChild(a);
         }
+
+        // Notify parent callback
+        if (optionsRef.current?.onCompleted) {
+          optionsRef.current.onCompleted(status);
+        }
       } else if (status.status === 'failed' || status.status === 'cancelled') {
         clearInterval(pollTimerRef.current);
         pollTimerRef.current = null;
+        setIsDownloading(false);
         fetchHistory();
+
+        if (status.status === 'failed' && optionsRef.current?.onError) {
+          optionsRef.current.onError(status.error || status.message || 'Media preparation failed.');
+        }
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Polling error', err);
       clearInterval(pollTimerRef.current);
       pollTimerRef.current = null;
+      setIsDownloading(false);
+      if (optionsRef.current?.onError) {
+        optionsRef.current.onError(err.response?.data?.detail || 'Lost connection to download server.');
+      }
     }
   }, [fetchHistory]);
 
@@ -66,6 +89,7 @@ export function useDownloadManager() {
     custom_filename?: string;
   }) => {
     try {
+      setIsDownloading(true);
       const initialJob = await api.startDownload(params);
       setActiveJob(initialJob);
       setIsModalOpen(true);
@@ -77,6 +101,10 @@ export function useDownloadManager() {
 
       return initialJob;
     } catch (err: any) {
+      setIsDownloading(false);
+      if (optionsRef.current?.onError) {
+        optionsRef.current.onError(err.response?.data?.detail || 'Failed to start download.');
+      }
       throw err;
     }
   }, [pollJobStatus]);
@@ -88,6 +116,7 @@ export function useDownloadManager() {
     target_format?: string;
   }) => {
     try {
+      setIsDownloading(true);
       const initialJob = await api.startBatchDownload(params);
       setActiveJob(initialJob);
       setIsModalOpen(true);
@@ -99,6 +128,7 @@ export function useDownloadManager() {
 
       return initialJob;
     } catch (err: any) {
+      setIsDownloading(false);
       throw err;
     }
   }, [pollJobStatus]);
@@ -112,6 +142,7 @@ export function useDownloadManager() {
         clearInterval(pollTimerRef.current);
         pollTimerRef.current = null;
       }
+      setIsDownloading(false);
       setActiveJob(prev => prev ? { ...prev, status: 'cancelled', message: 'Cancelled by user' } : null);
     }
   }, [activeJob]);
@@ -122,6 +153,7 @@ export function useDownloadManager() {
 
   return {
     activeJob,
+    isDownloading,
     isModalOpen,
     history,
     startDownload,

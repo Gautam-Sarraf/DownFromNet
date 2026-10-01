@@ -1,5 +1,19 @@
-import React, { useState, useRef } from 'react';
-import { Search, Clipboard, X, Loader2, ArrowRight, Play, Film, Image as ImageIcon, Music, Globe } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { 
+  Search, 
+  Clipboard, 
+  X, 
+  Loader2, 
+  ArrowRight, 
+  Globe,
+  Youtube,
+  Facebook,
+  Instagram,
+  Bot,
+  Music,
+  Cloud
+} from 'lucide-react';
+import { PlatformConfig, PLATFORMS_MAP } from '../config/platforms';
 import { isValidHttpUrl } from '../utils/formatters';
 
 interface UrlInputFormProps {
@@ -8,45 +22,18 @@ interface UrlInputFormProps {
   isAnalyzing: boolean;
   onAnalyze: (targetUrl?: string) => void;
   onClear: () => void;
+  platform: PlatformConfig;
+  onSelectPlatform: (slug: string) => void;
 }
 
-const SUPPORTED_PLATFORMS = [
-  {
-    name: 'YouTube',
-    color: 'text-red-600',
-    dotColor: 'bg-red-500',
-    sampleUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
-  },
-  {
-    name: 'Facebook',
-    color: 'text-blue-600',
-    dotColor: 'bg-blue-600',
-    sampleUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
-  },
-  {
-    name: 'Instagram',
-    color: 'text-pink-600',
-    dotColor: 'bg-pink-500',
-    sampleUrl: 'https://images-assets.nasa.gov/image/PIA12348/PIA12348~orig.jpg',
-  },
-  {
-    name: 'TikTok',
-    color: 'text-slate-900',
-    dotColor: 'bg-slate-900',
-    sampleUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
-  },
-  {
-    name: 'Twitter / X',
-    color: 'text-slate-800',
-    dotColor: 'bg-slate-800',
-    sampleUrl: 'https://commons.wikimedia.org/wiki/File:Apollo_11_launch_clip.ogv',
-  },
-  {
-    name: 'Reddit',
-    color: 'text-orange-600',
-    dotColor: 'bg-orange-500',
-    sampleUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
-  }
+const PLATFORM_PILLS = [
+  { id: 'home', slug: '', label: 'All Platforms', icon: Globe },
+  { id: 'youtube', slug: 'youtube-downloader', label: 'YouTube', icon: Youtube },
+  { id: 'instagram', slug: 'instagram-downloader', label: 'Instagram', icon: Instagram },
+  { id: 'facebook', slug: 'facebook-downloader', label: 'Facebook', icon: Facebook },
+  { id: 'tiktok', slug: 'tiktok-downloader', label: 'TikTok', icon: Music },
+  { id: 'twitter', slug: 'twitter-downloader', label: 'Twitter / X', icon: Cloud },
+  { id: 'reddit', slug: 'reddit-downloader', label: 'Reddit', icon: Bot },
 ];
 
 export const UrlInputForm: React.FC<UrlInputFormProps> = ({
@@ -54,7 +41,9 @@ export const UrlInputForm: React.FC<UrlInputFormProps> = ({
   setUrl,
   isAnalyzing,
   onAnalyze,
-  onClear
+  onClear,
+  platform,
+  onSelectPlatform
 }) => {
   const [isDragOver, setIsDragOver] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -88,34 +77,59 @@ export const UrlInputForm: React.FC<UrlInputFormProps> = ({
     }
   };
 
+  const IconComponent = platform.icon;
+
   return (
-    <div id="downloader" className="w-full max-w-3xl mx-auto text-center space-y-6 pt-4 sm:pt-8">
-      {/* Utility Tag & Hero Titles (Apple + Arc minimal style) */}
-      <div className="space-y-3.5">
-        <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-slate-100 border border-slate-200 text-slate-700 text-xs font-semibold">
-          <Globe className="w-3.5 h-3.5 text-blue-600" />
-          <span>Internet Utility — Clean & Minimal</span>
+    <div id="downloader" className="w-full max-w-4xl mx-auto text-center space-y-6 pt-2 sm:pt-6">
+      {/* Platform Navigation Pills */}
+      <div className="flex flex-wrap items-center justify-center gap-1.5 sm:gap-2 p-1.5 rounded-2xl bg-white/80 backdrop-blur-xs border border-slate-200/80 shadow-2xs max-w-fit mx-auto">
+        {PLATFORM_PILLS.map((p) => {
+          const isCurrent = (p.id === platform.id);
+          const PillIcon = p.icon;
+          return (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => onSelectPlatform(p.slug)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer active:scale-95 ${
+                isCurrent
+                  ? 'bg-slate-900 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
+              }`}
+            >
+              <PillIcon className="w-3.5 h-3.5" />
+              <span>{p.label}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Hero Badge, H1 Tag & Subtitle tailored for SEO */}
+      <div className="space-y-4">
+        <div className={`inline-flex items-center gap-2 px-3.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${platform.badgeBg} ${platform.badgeColor} border`}>
+          <IconComponent className="w-3.5 h-3.5" />
+          <span>{platform.badgeText}</span>
         </div>
 
-        <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-slate-900 font-display">
-          Download any video <br className="hidden sm:inline" />
-          <span className="text-slate-900">in high quality.</span>
+        {/* SEO-Optimized H1 Tag */}
+        <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-slate-900 font-display max-w-3xl mx-auto leading-tight">
+          {platform.h1}
         </h1>
 
-        <p className="max-w-xl mx-auto text-slate-500 text-sm sm:text-base leading-relaxed">
-          The cleanest way to save your favorite content from the web and social platforms. Instant analysis, no ads, high-speed.
+        <p className="max-w-2xl mx-auto text-slate-500 text-sm sm:text-base leading-relaxed">
+          {platform.subtitle}
         </p>
       </div>
 
       {/* Clean Minimalist Search / Input Pill */}
       <form
         role="search"
-        aria-label="Media URL search and download form"
+        aria-label={`${platform.name} search and download form`}
         onSubmit={handleSubmit}
         onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
         onDragLeave={() => setIsDragOver(false)}
         onDrop={handleDrop}
-        className={`w-full transition-all duration-200 ${
+        className={`w-full max-w-3xl mx-auto transition-all duration-200 ${
           isDragOver ? 'scale-[1.01]' : ''
         }`}
       >
@@ -132,8 +146,8 @@ export const UrlInputForm: React.FC<UrlInputFormProps> = ({
             type="url"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
-            placeholder="Paste your link here..."
-            aria-label="Video or media link URL"
+            placeholder={platform.placeholder}
+            aria-label={`${platform.name} URL`}
             className="w-full bg-transparent text-slate-900 placeholder-slate-400 text-sm sm:text-base outline-none pr-2 font-normal"
             required
             disabled={isAnalyzing}
@@ -188,26 +202,23 @@ export const UrlInputForm: React.FC<UrlInputFormProps> = ({
         </div>
       </form>
 
-      {/* Platform Chips Bar (as seen in Mockup 1) */}
-      <div className="flex flex-wrap items-center justify-center gap-2 pt-1 text-xs text-slate-500">
-        <span className="font-medium mr-1 text-slate-400">Supported:</span>
-        {SUPPORTED_PLATFORMS.map((platform, idx) => (
+      {/* Sample Quick Try Button */}
+      {platform.sampleUrl && (
+        <div className="flex items-center justify-center gap-2 text-xs text-slate-500">
+          <span className="text-slate-400">Want to test?</span>
           <button
-            key={idx}
             type="button"
             onClick={() => {
               setUrl(platform.sampleUrl);
               onAnalyze(platform.sampleUrl);
             }}
             disabled={isAnalyzing}
-            className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white hover:bg-slate-50 border border-slate-200/80 hover:border-slate-300 text-slate-700 font-medium text-xs shadow-2xs transition-all active:scale-95 cursor-pointer"
-            title={`Try ${platform.name}`}
+            className="text-blue-600 hover:text-blue-800 font-semibold underline underline-offset-2 hover:opacity-80 transition-opacity cursor-pointer"
           >
-            <span className={`w-1.5 h-1.5 rounded-full ${platform.dotColor}`} />
-            <span>{platform.name}</span>
+            Load sample {platform.shortName} link
           </button>
-        ))}
-      </div>
+        </div>
+      )}
     </div>
   );
 };

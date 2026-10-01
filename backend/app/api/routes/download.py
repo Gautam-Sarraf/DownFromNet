@@ -1,8 +1,15 @@
 import asyncio
 import os
+import urllib.parse
+from typing import Optional
+import httpx
 from fastapi import APIRouter, Request, BackgroundTasks, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
+from app.core.config import settings
+from app.core.cookies import get_cookie_file_path
+from app.core.proxy import proxy_manager
 from app.core.rate_limit import rate_limiter
+from app.core.security import sanitize_filename
 from app.core.errors import JobNotFoundError, ProcessingError
 from app.schemas.download import (
     DownloadRequest,
@@ -13,6 +20,143 @@ from app.services.downloader import download_manager
 from app.services.analyzer import analyzer_service
 
 router = APIRouter(tags=["Download"])
+
+
+@router.get("/download/stream")
+async def stream_download(
+    request: Request,
+    url: str,
+    format_id: Optional[str] = "best",
+    custom_filename: Optional[str] = None,
+    target_format: Optional[str] = None,
+    direct_url: Optional[str] = None
+):
+    """
+    Streams media chunks directly into the browser's HTTP response.
+    Triggers immediate, native browser download without server-side intermediate storage.
+    """
+    rate_limiter.check_limit(request, endpoint_type="download")
+
+    safe_name = sanitize_filename(custom_filename or "media_download")
+    ext = target_format or "mp4"
+
+    is_platform_url = any(d in url.lower() for d in [
+        "youtube", "youtu.be", "vimeo", "reddit", "twitter", "x.com", "tiktok", "instagram",
+        "facebook", "fb.watch", "dailymotion", "soundcloud", "twitch", "pinterest", "bilibili"
+    ])
+
+    if direct_url and not is_platform_url:
+        active_proxy = proxy_manager.get_proxy()
+        client = httpx.AsyncClient(
+            proxy=active_proxy,
+            timeout=settings.MAX_DOWNLOAD_DURATION_SECONDS,
+            follow_redirects=True,
+            headers={"User-Agent": settings.USER_AGENT}
+        )
+        try:
+            req = client.build_request("GET", direct_url)
+            resp = await client.send(req, stream=True)
+            if resp.status_code >= 400:
+                await resp.aclose()
+                await client.aclose()
+                raise HTTPException(status_code=resp.status_code, detail="Remote media source unavailable.")
+
+            content_length = resp.headers.get("content-length")
+            content_type = resp.headers.get("content-type") or "application/octet-stream"
+
+            async def direct_stream_generator():
+                try:
+                    async for chunk in resp.aiter_bytes(chunk_size=65536):
+                        yield chunk
+                finally:
+                    await resp.aclose()
+                    await client.aclose()
+
+            headers = {
+                "Content-Disposition": f'attachment; filename="{safe_name}.{ext}"',
+                "Accept-Ranges": "bytes",
+            }
+            if content_length:
+                headers["Content-Length"] = content_length
+
+            return StreamingResponse(
+                direct_stream_generator(),
+                media_type=content_type,
+                headers=headers
+            )
+        except HTTPException:
+            raise
+        except Exception as e:
+            await client.aclose()
+            raise HTTPException(status_code=500, detail=str(e))
+
+    # For YouTube and social platforms: stream live bytes via yt-dlp stdout pipe
+    cookie_file = get_cookie_file_path()
+    cmd = [
+        "yt-dlp",
+        "-o", "-",
+        "--no-playlist",
+        "--quiet",
+        "--no-warnings",
+        "--user-agent", settings.USER_AGENT
+    ]
+
+    if format_id and format_id not in ["best", "direct"]:
+        cmd.extend(["-f", f"{format_id}+bestaudio/bestvideo+{format_id}/{format_id}/best"])
+    else:
+        cmd.extend(["-f", "bestvideo+bestaudio/best/b"])
+
+    if target_format and target_format in ["mp3", "m4a", "wav"]:
+        cmd.extend(["-x", "--audio-format", target_format])
+        ext = target_format
+    else:
+        cmd.extend(["--merge-output-format", "mp4"])
+        ext = "mp4"
+
+    if cookie_file:
+        cmd.extend(["--cookies", str(cookie_file)])
+
+    cmd.append(url)
+
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to start stream: {str(e)}")
+
+    async def proc_stream_generator():
+        try:
+            while True:
+                chunk = await proc.stdout.read(65536)
+                if not chunk:
+                    break
+                yield chunk
+            await proc.wait()
+        except asyncio.CancelledError:
+            try:
+                proc.kill()
+            except Exception:
+                pass
+            raise
+        except Exception:
+            try:
+                proc.kill()
+            except Exception:
+                pass
+
+    headers = {
+        "Content-Disposition": f'attachment; filename="{safe_name}.{ext}"',
+        "Accept-Ranges": "bytes",
+    }
+
+    return StreamingResponse(
+        proc_stream_generator(),
+        media_type="video/mp4" if ext == "mp4" else "application/octet-stream",
+        headers=headers
+    )
 
 
 @router.post("/download", response_model=DownloadJobStatus)

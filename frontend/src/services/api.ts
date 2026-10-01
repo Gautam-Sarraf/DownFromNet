@@ -23,6 +23,25 @@ export const api = {
     return response.data;
   },
 
+  // Get Direct Streaming Download URL
+  getStreamDownloadUrl(params: {
+    url: string;
+    format_id?: string;
+    target_format?: string;
+    custom_filename?: string;
+    direct_url?: string;
+  }): string {
+    const base = import.meta.env.VITE_API_URL || '/api';
+    const query = new URLSearchParams({
+      url: params.url,
+      ...(params.format_id ? { format_id: params.format_id } : {}),
+      ...(params.target_format ? { target_format: params.target_format } : {}),
+      ...(params.custom_filename ? { custom_filename: params.custom_filename } : {}),
+      ...(params.direct_url ? { direct_url: params.direct_url } : {}),
+    });
+    return `${base}/download/stream?${query.toString()}`;
+  },
+
   // Initiate single download
   async startDownload(params: {
     url: string;
